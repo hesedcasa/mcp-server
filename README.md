@@ -20,7 +20,7 @@ $ npm install -g @hesed/mcp-server
 $ mcp-server COMMAND
 running command...
 $ mcp-server (--version)
-@hesed/mcp-server/0.1.0 darwin-arm64 node-v22.14.0
+@hesed/mcp-server/0.1.0 linux-x64 node-v22.22.3
 $ mcp-server --help [COMMAND]
 USAGE
   $ mcp-server COMMAND
