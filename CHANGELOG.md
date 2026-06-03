@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1](https://github.com/hesedcasa/mcp-server/compare/v0.1.0...v0.1.1) (2026-06-03)
+
+
+### ♻️ Chores
+
+* extract MCP server internals into focused modules and adopt @hesed/permission ([6a8ff1b](https://github.com/hesedcasa/mcp-server/commit/6a8ff1b0df31e87f884c5b52d6449a59536a0132))
+* extract MCP server internals into focused modules and adopt @hesed/permission ([1097b64](https://github.com/hesedcasa/mcp-server/commit/1097b6473de32993b07ae29bac01fc460adabf0e))
+
+## Changelog
+
 
 All notable changes to this project will be documented in this file.
 
