@@ -8,6 +8,7 @@
   },
   "bugs": "https://github.com/hesedcasa/mcp-server/issues",
   "dependencies": {
+    "@hesed/permission": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@oclif/core": "^4",
     "@toon-format/toon": "^2.3.0"
