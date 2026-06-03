@@ -1,6 +1,6 @@
 {
   "name": "@hesed/mcp-server",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server plugin — exposes all CLI commands as MCP tools",
   "author": "Hesed",
   "bin": {
