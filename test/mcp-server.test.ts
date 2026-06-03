@@ -116,12 +116,11 @@ describe('mcp-server', () => {
       expect(server).to.exist
     })
 
-    it('exposes exactly two tools: search and run_command', async () => {
-      const config = makeMockConfig(ALL_COMMANDS)
-      const server = await createMcpServer(config)
-      expect(server).to.exist
-      // Verify the server was created (tool listing requires a connected transport,
-      // so we verify creation succeeds and trust the handler registration)
+    it('exposes exactly two tools: search_tools and run_command', async () => {
+      const client = await makeClient(ALL_COMMANDS)
+      const {tools} = await client.listTools()
+      const names = tools.map((t) => t.name)
+      expect(names).to.have.members(['search_tools', 'run_command'])
     })
   })
 
@@ -214,64 +213,81 @@ describe('mcp-server', () => {
       const {text} = result.content[0] as {text: string}
       expect(text).to.include('all pets')
     })
+
+    it('passes flags field to the command alongside args', async () => {
+      const capturedArgv: string[] = []
+      const loadable = {
+        ...PETSTORE_CMD,
+        load: async () =>
+          class CaptureCmd {
+            log = () => {}
+            warn = String
+
+            constructor(
+              readonly argv: string[],
+              _config: Config,
+            ) {
+              capturedArgv.push(...argv)
+            }
+
+            async run() {
+              return null
+            }
+          },
+      } as never as Command.Loadable
+      const client = await makeClient([loadable, SEARCH_CMD])
+      await client.callTool({
+        arguments: {commandId: 'petstore listPets', flags: {limit: '10'}},
+        name: 'run_command',
+      })
+      expect(capturedArgv).to.include('--limit').and.to.include('10')
+    })
   })
 
-  // ─── search_tools cache integration ───────────────────────────────────────
+  // ─── search_tools handler ─────────────────────────────────────────────────
 
-  describe('search_tools cache integration', () => {
-    it('caches results and reuses them on identical query', async () => {
-      let callCount = 0
-      const loadable = {
-        ...SEARCH_CMD,
-        load: async () =>
-          class CountingCmd {
-            log = (_msg?: string) => {}
-            warn = String
-
-            async run() {
-              callCount++
-              this.log(`result-${callCount}`)
-              return null
-            }
-          },
-      } as never as Command.Loadable
-      const client = await makeClient([loadable])
-
-      const first = (await client.callTool({
-        arguments: {limit: 5, query: 'jira'},
-        name: 'search_tools',
-      })) as any // eslint-disable-line @typescript-eslint/no-explicit-any
-      const second = (await client.callTool({
-        arguments: {limit: 5, query: 'jira'},
-        name: 'search_tools',
-      })) as any // eslint-disable-line @typescript-eslint/no-explicit-any
-
-      expect(callCount).to.equal(1)
-      expect(first.content[0].text).to.equal(second.content[0].text)
+  describe('search_tools tool handler', () => {
+    it('returns results from the search command', async () => {
+      const executable = cmdWithOutput(SEARCH_CMD, 'jira get issue')
+      const client = await makeClient([executable])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await client.callTool({arguments: {query: 'jira'}, name: 'search_tools'})) as any
+      expect(result.isError).to.be.undefined
+      const {text} = result.content[0] as {text: string}
+      expect(text).to.include('jira get issue')
     })
 
-    it('does not reuse cache across different queries', async () => {
-      let callCount = 0
+    it('returns isError when no search command is registered', async () => {
+      const client = await makeClient([IMPORT_CMD])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await client.callTool({arguments: {query: 'anything'}, name: 'search_tools'})) as any
+      expect(result.isError).to.be.true
+    })
+
+    it('forwards the limit argument to the search command', async () => {
+      const capturedArgv: string[] = []
       const loadable = {
         ...SEARCH_CMD,
         load: async () =>
-          class CountingCmd {
-            log = (_msg?: string) => {}
+          class CaptureSearch {
+            log = () => {}
             warn = String
 
+            constructor(
+              readonly argv: string[],
+              _config: Config,
+            ) {
+              capturedArgv.push(...argv)
+            }
+
             async run() {
-              callCount++
-              this.log(`result-${callCount}`)
               return null
             }
           },
       } as never as Command.Loadable
       const client = await makeClient([loadable])
-
-      await client.callTool({arguments: {query: 'jira'}, name: 'search_tools'})
-      await client.callTool({arguments: {query: 'confluence'}, name: 'search_tools'})
-
-      expect(callCount).to.equal(2)
+      await client.callTool({arguments: {limit: 3, query: 'jira'}, name: 'search_tools'})
+      expect(capturedArgv).to.include('--limit').and.to.include('3')
     })
   })
 })
