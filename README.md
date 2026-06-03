@@ -20,7 +20,7 @@ $ npm install -g @hesed/mcp-server
 $ mcp-server COMMAND
 running command...
 $ mcp-server (--version)
-@hesed/mcp-server/0.1.1 linux-x64 node-v22.22.3
+@hesed/mcp-server/0.1.2 linux-x64 node-v22.22.3
 $ mcp-server --help [COMMAND]
 USAGE
   $ mcp-server COMMAND
@@ -63,7 +63,7 @@ EXAMPLES
   $ mcp-server mcp start --transport http --host 0.0.0.0
 ```
 
-_See code: [src/commands/mcp/start.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.1/src/commands/mcp/start.ts)_
+_See code: [src/commands/mcp/start.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.2/src/commands/mcp/start.ts)_
 
 ## `mcp-server mcp:token:delete`
 
@@ -80,7 +80,7 @@ EXAMPLES
   $ mcp-server mcp token delete
 ```
 
-_See code: [src/commands/mcp/token/delete.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.1/src/commands/mcp/token/delete.ts)_
+_See code: [src/commands/mcp/token/delete.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.2/src/commands/mcp/token/delete.ts)_
 
 ## `mcp-server mcp:token:generate`
 
@@ -97,7 +97,7 @@ EXAMPLES
   $ mcp-server mcp token generate
 ```
 
-_See code: [src/commands/mcp/token/generate.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.1/src/commands/mcp/token/generate.ts)_
+_See code: [src/commands/mcp/token/generate.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.2/src/commands/mcp/token/generate.ts)_
 
 ## `mcp-server mcp:token:show`
 
@@ -114,5 +114,5 @@ EXAMPLES
   $ mcp-server mcp token show
 ```
 
-_See code: [src/commands/mcp/token/show.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.1/src/commands/mcp/token/show.ts)_
+_See code: [src/commands/mcp/token/show.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.2/src/commands/mcp/token/show.ts)_
 <!-- commandsstop -->
