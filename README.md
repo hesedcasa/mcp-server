@@ -7,7 +7,7 @@ MCP server plugin — exposes all CLI commands as MCP tools
 [![Downloads/week](https://img.shields.io/npm/dw/@hesed/mcp-server.svg)](https://npmjs.org/package/@hesed/mcp-server)
 
 <!-- toc -->
-* [permission](#permission)
+* [mcp-server](#mcp-server)
 * [Usage](#usage)
 * [Commands](#commands)
 <!-- tocstop -->
@@ -16,14 +16,14 @@ MCP server plugin — exposes all CLI commands as MCP tools
 
 <!-- usage -->
 ```sh-session
-$ npm install -g @hesed/permission
-$ permission COMMAND
+$ npm install -g @hesed/mcp-server
+$ mcp-server COMMAND
 running command...
-$ permission (--version)
-@hesed/permission/0.1.1 linux-x64 node-v22.22.3
-$ permission --help [COMMAND]
+$ mcp-server (--version)
+@hesed/mcp-server/0.1.0 linux-x64 node-v22.22.3
+$ mcp-server --help [COMMAND]
 USAGE
-  $ permission COMMAND
+  $ mcp-server COMMAND
 ...
 ```
 <!-- usagestop -->
@@ -31,114 +31,88 @@ USAGE
 # Commands
 
 <!-- commands -->
-* [`permission permission disallow PATTERN`](#permission-permission-disallow-pattern)
-* [`permission permission export FILE`](#permission-permission-export-file)
-* [`permission permission import FILE`](#permission-permission-import-file)
-* [`permission permission list`](#permission-permission-list)
-* [`permission permission reset`](#permission-permission-reset)
+* [`mcp-server mcp:start`](#mcp-server-mcpstart)
+* [`mcp-server mcp:token:delete`](#mcp-server-mcptokendelete)
+* [`mcp-server mcp:token:generate`](#mcp-server-mcptokengenerate)
+* [`mcp-server mcp:token:show`](#mcp-server-mcptokenshow)
 
-## `permission permission disallow PATTERN`
+## `mcp-server mcp:start`
 
-Disallow a command pattern in the permission list
-
-```
-USAGE
-  $ permission permission disallow PATTERN
-
-ARGUMENTS
-  PATTERN  Command pattern to disallow.
-
-DESCRIPTION
-  Disallow a command pattern in the permission list
-
-EXAMPLES
-  $ permission permission disallow "*"
-
-  $ permission permission disallow jira
-
-  $ permission permission disallow "jira *"
-
-  $ permission permission disallow "jira issue create"
-```
-
-_See code: [src/commands/permission/disallow.ts](https://github.com/hesedcasa/permission/blob/v0.1.1/src/commands/permission/disallow.ts)_
-
-## `permission permission export FILE`
-
-Export the permission configuration to a JSON file
+Start an MCP server exposing all CLI commands as tools
 
 ```
 USAGE
-  $ permission permission export FILE
-
-ARGUMENTS
-  FILE  File path to export the permission configuration to
-
-DESCRIPTION
-  Export the permission configuration to a JSON file
-
-EXAMPLES
-  $ permission permission export permission.json
-```
-
-_See code: [src/commands/permission/export.ts](https://github.com/hesedcasa/permission/blob/v0.1.1/src/commands/permission/export.ts)_
-
-## `permission permission import FILE`
-
-Import the permission configuration from a JSON file
-
-```
-USAGE
-  $ permission permission import FILE
-
-ARGUMENTS
-  FILE  File path to import the permission configuration from
-
-DESCRIPTION
-  Import the permission configuration from a JSON file
-
-EXAMPLES
-  $ permission permission import permission.json
-```
-
-_See code: [src/commands/permission/import.ts](https://github.com/hesedcasa/permission/blob/v0.1.1/src/commands/permission/import.ts)_
-
-## `permission permission list`
-
-List all rules in the permission list
-
-```
-USAGE
-  $ permission permission list
-
-DESCRIPTION
-  List all rules in the permission list
-
-EXAMPLES
-  $ permission permission list
-```
-
-_See code: [src/commands/permission/list.ts](https://github.com/hesedcasa/permission/blob/v0.1.1/src/commands/permission/list.ts)_
-
-## `permission permission reset`
-
-Reset all permission rules
-
-```
-USAGE
-  $ permission permission reset [--confirm]
+  $ mcp-server mcp:start [--host <value>] [--port <value>] [--transport stdio|http]
 
 FLAGS
-  --confirm  Skip the confirmation prompt
+  --host=<value>        [default: 127.0.0.1] IP address to listen on (HTTP transport only)
+  --port=<value>        [default: 3000] Port to listen on (HTTP transport only)
+  --transport=<option>  [default: stdio] Transport to use
+                        <options: stdio|http>
 
 DESCRIPTION
-  Reset all permission rules
+  Start an MCP server exposing all CLI commands as tools
 
 EXAMPLES
-  $ permission permission reset
+  $ mcp-server mcp start
 
-  $ permission permission reset --confirm
+  $ mcp-server mcp start --transport http
+
+  $ mcp-server mcp start --transport http --port 3001
+
+  $ mcp-server mcp start --transport http --host 0.0.0.0
 ```
 
-_See code: [src/commands/permission/reset.ts](https://github.com/hesedcasa/permission/blob/v0.1.1/src/commands/permission/reset.ts)_
+_See code: [src/commands/mcp/start.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.0/src/commands/mcp/start.ts)_
+
+## `mcp-server mcp:token:delete`
+
+Remove the MCP server Bearer token, disabling HTTP authentication
+
+```
+USAGE
+  $ mcp-server mcp:token:delete
+
+DESCRIPTION
+  Remove the MCP server Bearer token, disabling HTTP authentication
+
+EXAMPLES
+  $ mcp-server mcp token delete
+```
+
+_See code: [src/commands/mcp/token/delete.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.0/src/commands/mcp/token/delete.ts)_
+
+## `mcp-server mcp:token:generate`
+
+Generate a Bearer token for MCP server HTTP authentication
+
+```
+USAGE
+  $ mcp-server mcp:token:generate
+
+DESCRIPTION
+  Generate a Bearer token for MCP server HTTP authentication
+
+EXAMPLES
+  $ mcp-server mcp token generate
+```
+
+_See code: [src/commands/mcp/token/generate.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.0/src/commands/mcp/token/generate.ts)_
+
+## `mcp-server mcp:token:show`
+
+Show the current MCP server Bearer token
+
+```
+USAGE
+  $ mcp-server mcp:token:show
+
+DESCRIPTION
+  Show the current MCP server Bearer token
+
+EXAMPLES
+  $ mcp-server mcp token show
+```
+
+_See code: [src/commands/mcp/token/show.ts](https://github.com/hesedcasa/mcp-server/blob/v0.1.0/src/commands/mcp/token/show.ts)_
 <!-- commandsstop -->
