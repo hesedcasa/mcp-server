@@ -37,13 +37,13 @@ export function buildArgv(loadable: Command.Loadable, args: Record<string, unkno
 
   for (const name of Object.keys(loadable.args ?? {})) {
     const value = args[name]
-    if (value !== null) argv.push(String(value))
+    if (value !== null && value !== undefined) argv.push(String(value))
   }
 
   for (const [name, flag] of Object.entries(loadable.flags ?? {})) {
     if (name === 'json') continue
     const value = args[name]
-    if (value === null) continue
+    if (value === null || value === undefined) continue
     appendFlagArgs(argv, name, flag as {type: string}, value)
   }
 
@@ -80,7 +80,7 @@ export async function executeCommand(
     const instance = new ((await loadable.load()) as any)(argv, config) as Command
     const getOutput = interceptOutput(instance)
     const result = await instance.run()
-    const output = result === null ? getOutput() : JSON.stringify(result, null, 2)
+    const output = result === null || result === undefined ? getOutput() : JSON.stringify(result, null, 2)
     return {output: output || '(no output)'}
   } catch (error) {
     return {error: error instanceof Error ? error.message : String(error), output: ''}
