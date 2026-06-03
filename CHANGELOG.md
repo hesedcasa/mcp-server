@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/hesedcasa/mcp-server/compare/v0.1.1...v0.1.2) (2026-06-03)
+
+
+### 🛠️ Fixes
+
+* skip undefined flag/arg values and capture void command output ([dccc7ef](https://github.com/hesedcasa/mcp-server/commit/dccc7effc8f0054ac6ab5b77fe5a2cabe5b7bc0a))
+
 ## [0.1.1](https://github.com/hesedcasa/mcp-server/compare/v0.1.0...v0.1.1) (2026-06-03)
 
 
