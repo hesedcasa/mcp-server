@@ -98,7 +98,10 @@ export async function runCommand(
     throw new ExecutionError('command_not_found', id, `Command "${id}" not found.`)
   }
 
-  const permissionConfig = await readPermissionConfig(config.configDir)
+  const permissionConfig = (await readPermissionConfig(config.configDir)) ?? {
+    allowRules: [{pattern: '*'}],
+    denyRules: [],
+  }
   const separator = config.topicSeparator ?? ' '
   const normalizedForPermission = loadable.id.replaceAll(':', separator)
   if (!isCommandAllowed(normalizedForPermission, permissionConfig)) {
