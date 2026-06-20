@@ -18,7 +18,10 @@ import {makeRunCommandHandler, makeSearchToolsHandler} from './tool-handlers.js'
 export async function createMcpServer(config: Config): Promise<McpServer> {
   const mcpServer = new McpServer({name: 'sdkck', version: config.version ?? '0.0.0'}, {capabilities: {tools: {}}})
 
-  const permissionConfig = config.configDir ? await readPermissionConfig(config.configDir) : {rules: []}
+  const permissionConfig = (config.configDir ? await readPermissionConfig(config.configDir) : null) ?? {
+    allowRules: [{pattern: '*'}],
+    denyRules: [],
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jitPlugins = ((config.pjson?.oclif as any)?.jitPlugins as Record<string, string> | undefined) ?? {}
 
