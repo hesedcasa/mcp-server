@@ -1,8 +1,9 @@
-import {Command, Flags} from '@oclif/core'
+import {HostConfigCommand} from '@hesed/plugin-lib'
+import {Flags} from '@oclif/core'
 
 import {startMcpServer} from '../../mcp-server.js'
 
-export default class McpStart extends Command {
+export default class McpStart extends HostConfigCommand {
   static description = 'Start an MCP server exposing all CLI commands as tools'
   static examples = [
     '<%= config.bin %> mcp start',
