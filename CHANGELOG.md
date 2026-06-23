@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3](https://github.com/hesedcasa/mcp-server/compare/v0.1.2...v0.1.3) (2026-06-23)
+
+
+### 🛠️ Fixes
+
+* adapt to @hesed/permission 0.3.0 API changes ([b4df44d](https://github.com/hesedcasa/mcp-server/commit/b4df44d4a094c9ce2e1f7d640c528636b7cfc87f))
+
+
+### ♻️ Chores
+
+* migrate keywords and host config to @hesed/plugin-lib ([2d0e093](https://github.com/hesedcasa/mcp-server/commit/2d0e09333118bf50bffdaaf9e30f23c827dac9a7))
+* migrate keywords and host config to @hesed/plugin-lib ([d43b4ba](https://github.com/hesedcasa/mcp-server/commit/d43b4bab8baf4cf6d5200950aafe667b05c3b531))
+
 ## [0.1.2](https://github.com/hesedcasa/mcp-server/compare/v0.1.1...v0.1.2) (2026-06-03)
 
 
