@@ -21,7 +21,7 @@
     "@types/chai": "^5",
     "@types/chai-as-promised": "^8.0.2",
     "@types/mocha": "^10",
-    "@types/node": "^25",
+    "@types/node": "^26",
     "chai": "^6",
     "chai-as-promised": "^8.0.2",
     "eslint": "^9",
