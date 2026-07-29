@@ -12,7 +12,7 @@
     "@hesed/plugin-lib": "^0.10.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@oclif/core": "^4",
-    "@toon-format/toon": "^2.3.0"
+    "@toon-format/toon": "^4.1.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2",
