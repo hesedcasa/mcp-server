@@ -13,7 +13,7 @@ export function makeRunCommandHandler(config: Config): ToolHandler {
       flags: cmdFlags = {},
     } = args as {
       args?: Record<string, unknown>
-      commandId: string
+      commandId?: string
       flags?: Record<string, unknown>
     }
 
@@ -26,7 +26,7 @@ export function makeRunCommandHandler(config: Config): ToolHandler {
             type: 'text' as const,
           },
         ],
-        ...(result.error ? {isError: true as const} : {}),
+        ...(result.error && {isError: true as const}),
       }
     } catch (error) {
       const msg =
@@ -43,9 +43,9 @@ export function makeRunCommandHandler(config: Config): ToolHandler {
 }
 
 export function makeSearchToolsHandler(config: Config): ToolHandler {
-  const searchCmd = config.commands.find((c) => c.id === 'search')
+  const hasSearchCmd = config.commands.some((c) => c.id === 'search')
   return async (args) => {
-    if (!searchCmd) {
+    if (!hasSearchCmd) {
       return {content: [{text: 'Search command not available', type: 'text' as const}], isError: true}
     }
 

@@ -1,14 +1,12 @@
 import type {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
 import type {Config} from '@oclif/core/interfaces'
 
-// eslint-disable-next-line import/no-unresolved
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-// eslint-disable-next-line import/no-unresolved
 import {isInitializeRequest} from '@modelcontextprotocol/sdk/types.js'
 import {randomUUID} from 'node:crypto'
 import * as http from 'node:http'
 
-import {checkBearerToken, readMcpAuth} from './mcp-auth.js'
+import {hasValidBearerToken, readMcpAuth} from './mcp-auth.js'
 
 export async function startHttpTransport(
   config: Config,
@@ -16,10 +14,10 @@ export async function startHttpTransport(
   options: {host: string; port: number},
 ): Promise<void> {
   const {host, port} = options
-  const token = config.configDir ? await readMcpAuth(config.configDir) : null
+  const token = config.configDir ? await readMcpAuth(config.configDir) : undefined
   const transports = new Map<string, StreamableHTTPServerTransport>()
 
-  const httpServer = http.createServer(async (req, res) => {
+  const handleRequest = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
 
     if (url.pathname !== '/mcp') {
@@ -27,7 +25,7 @@ export async function startHttpTransport(
       return
     }
 
-    if (token && !checkBearerToken(req, res, token)) return
+    if (token && !hasValidBearerToken(req, res, token)) return
 
     const sessionId = req.headers['mcp-session-id'] as string | undefined
 
@@ -109,6 +107,10 @@ export async function startHttpTransport(
     }
 
     res.writeHead(405).end('Method not allowed')
+  }
+
+  const httpServer = http.createServer((req, res) => {
+    void handleRequest(req, res)
   })
 
   await new Promise<void>((resolve, reject) => {

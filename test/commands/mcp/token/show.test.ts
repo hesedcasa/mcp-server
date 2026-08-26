@@ -8,14 +8,15 @@ import {writeMcpAuth} from '../../../../src/mcp-auth.js'
 
 function makeShow(configDir: string): {cmd: McpTokenShow; output: () => string} {
   const lines: string[] = []
-  const config = {
+  const stubConfig = {
     bin: 'sdkck',
     configDir,
     runHook: async () => ({failures: [], successes: []}),
-  } as never
+  }
+  const config = stubConfig as never
   const cmd = new McpTokenShow([], config)
   cmd.log = (message = '') => {
-    lines.push(String(message))
+    lines.push(message)
   }
 
   return {cmd, output: () => lines.join('\n')}

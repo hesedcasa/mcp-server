@@ -5,30 +5,34 @@ import {mkdtemp, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import {checkBearerToken, deleteMcpAuth, readMcpAuth, writeMcpAuth} from '../src/mcp-auth.js'
+import {deleteMcpAuth, hasValidBearerToken, readMcpAuth, writeMcpAuth} from '../src/mcp-auth.js'
 
 function makeReq(authorization?: string): IncomingMessage {
-  return {headers: authorization ? {authorization} : {}} as unknown as IncomingMessage
+  const req = {headers: authorization ? {authorization} : {}}
+  return req as unknown as IncomingMessage
 }
 
 function makeRes() {
-  let statusCodeVal: null | number = null
-  let endedVal = false
-  let wwwAuthVal: null | string = null
-  const res = {
+  let statusCodeVal: number | undefined
+  let isEnded = false
+  let wwwAuthVal: string | undefined
+  const stub = {
     end() {
-      endedVal = true
+      isEnded = true
     },
-    setHeader() {},
+    setHeader() {
+      // headers are not inspected by these tests
+    },
     writeHead(code: number, headers?: Record<string, string>) {
       statusCodeVal = code
       if (headers?.['WWW-Authenticate']) wwwAuthVal = headers['WWW-Authenticate']
-      return res
+      return stub
     },
-  } as unknown as ServerResponse
+  }
+  const res = stub as unknown as ServerResponse
   return {
     get ended() {
-      return endedVal
+      return isEnded
     },
     res,
     get statusCode() {
@@ -54,8 +58,8 @@ describe('mcp-auth', () => {
   // ─── storage ────────────────────────────────────────────────────────────────
 
   describe('readMcpAuth', () => {
-    it('returns null when file does not exist', async () => {
-      expect(await readMcpAuth(tmpDir)).to.be.null
+    it('returns undefined when file does not exist', async () => {
+      expect(await readMcpAuth(tmpDir)).to.be.undefined
     })
 
     it('returns the stored token after write', async () => {
@@ -81,7 +85,7 @@ describe('mcp-auth', () => {
     it('removes the token file', async () => {
       await writeMcpAuth(tmpDir, 'tok')
       await deleteMcpAuth(tmpDir)
-      expect(await readMcpAuth(tmpDir)).to.be.null
+      expect(await readMcpAuth(tmpDir)).to.be.undefined
     })
 
     it('does not throw when file does not exist', async () => {
@@ -89,35 +93,31 @@ describe('mcp-auth', () => {
     })
   })
 
-  // ─── checkBearerToken ───────────────────────────────────────────────────────
+  // ─── hasValidBearerToken ───────────────────────────────────────────────────────
 
-  describe('checkBearerToken', () => {
+  describe('hasValidBearerToken', () => {
     it('returns true for a valid token', () => {
       const mock = makeRes()
-      const result = checkBearerToken(makeReq('Bearer correcttoken'), mock.res, 'correcttoken')
-      expect(result).to.be.true
-      expect(mock.statusCode).to.be.null
+      expect(hasValidBearerToken(makeReq('Bearer correcttoken'), mock.res, 'correcttoken')).to.be.true
+      expect(mock.statusCode).to.be.undefined
     })
 
     it('returns false and writes 401 when Authorization header is missing', () => {
       const mock = makeRes()
-      const result = checkBearerToken(makeReq(), mock.res, 'mytoken')
-      expect(result).to.be.false
+      expect(hasValidBearerToken(makeReq(), mock.res, 'mytoken')).to.be.false
       expect(mock.statusCode).to.equal(401)
       expect(mock.wwwAuth).to.equal('Bearer')
     })
 
     it('returns false and writes 401 for wrong token', () => {
       const mock = makeRes()
-      const result = checkBearerToken(makeReq('Bearer wrongtoken'), mock.res, 'mytoken')
-      expect(result).to.be.false
+      expect(hasValidBearerToken(makeReq('Bearer wrongtoken'), mock.res, 'mytoken')).to.be.false
       expect(mock.statusCode).to.equal(401)
     })
 
     it('returns false and writes 401 for malformed header (no Bearer prefix)', () => {
       const mock = makeRes()
-      const result = checkBearerToken(makeReq('mytoken'), mock.res, 'mytoken')
-      expect(result).to.be.false
+      expect(hasValidBearerToken(makeReq('mytoken'), mock.res, 'mytoken')).to.be.false
       expect(mock.statusCode).to.equal(401)
     })
   })

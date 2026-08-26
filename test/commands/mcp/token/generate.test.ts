@@ -8,14 +8,15 @@ import {readMcpAuth} from '../../../../src/mcp-auth.js'
 
 function makeGenerate(configDir: string): {cmd: McpTokenGenerate; output: () => string} {
   const lines: string[] = []
-  const config = {
+  const stubConfig = {
     bin: 'sdkck',
     configDir,
     runHook: async () => ({failures: [], successes: []}),
-  } as never
+  }
+  const config = stubConfig as never
   const cmd = new McpTokenGenerate([], config)
   cmd.log = (message = '') => {
-    lines.push(String(message))
+    lines.push(message)
   }
 
   return {cmd, output: () => lines.join('\n')}
@@ -37,7 +38,7 @@ describe('mcp token generate', () => {
     await cmd.run()
     const stored = await readMcpAuth(tmpDir)
     expect(stored).to.be.a('string').with.lengthOf(64)
-    expect(stored).to.match(/^[0-9a-f]{64}$/)
+    expect(stored).to.match(/^[0-9a-f]{64}$/v)
   })
 
   it('prints the token once', async () => {

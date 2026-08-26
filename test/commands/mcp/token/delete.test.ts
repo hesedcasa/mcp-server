@@ -8,14 +8,15 @@ import {readMcpAuth, writeMcpAuth} from '../../../../src/mcp-auth.js'
 
 function makeDelete(configDir: string): {cmd: McpTokenDelete; output: () => string} {
   const lines: string[] = []
-  const config = {
+  const stubConfig = {
     bin: 'sdkck',
     configDir,
     runHook: async () => ({failures: [], successes: []}),
-  } as never
+  }
+  const config = stubConfig as never
   const cmd = new McpTokenDelete([], config)
   cmd.log = (message = '') => {
-    lines.push(String(message))
+    lines.push(message)
   }
 
   return {cmd, output: () => lines.join('\n')}
@@ -36,14 +37,14 @@ describe('mcp token delete', () => {
     await writeMcpAuth(tmpDir, 'tok')
     const {cmd} = makeDelete(tmpDir)
     await cmd.run()
-    expect(await readMcpAuth(tmpDir)).to.be.null
+    expect(await readMcpAuth(tmpDir)).to.be.undefined
   })
 
   it('prints a confirmation message', async () => {
     await writeMcpAuth(tmpDir, 'tok')
     const {cmd, output} = makeDelete(tmpDir)
     await cmd.run()
-    expect(output()).to.match(/removed|deleted/i)
+    expect(output()).to.match(/removed|deleted/iv)
   })
 
   it('succeeds and confirms even when no token was configured', async () => {
