@@ -11,6 +11,7 @@ export default class McpStart extends HostConfigCommand {
     '<%= config.bin %> mcp start --transport http --port 3001',
     '<%= config.bin %> mcp start --transport http --host 0.0.0.0',
   ]
+
   static flags = {
     host: Flags.string({
       default: '127.0.0.1',

@@ -17,18 +17,24 @@ export class ExecutionError extends Error {
   }
 }
 
-export interface RunCommandResult {
+export type RunCommandResult = {
   error?: string
   output: string
+}
+
+function toArgString(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'bigint' || typeof value === 'boolean' || typeof value === 'number') return String(value)
+  return JSON.stringify(value) ?? ''
 }
 
 function appendFlagArgs(argv: string[], name: string, flag: {type: string}, value: unknown): void {
   if (flag.type === 'boolean') {
     if (value === true) argv.push(`--${name}`)
   } else if (Array.isArray(value)) {
-    for (const v of value) argv.push(`--${name}`, String(v))
+    for (const v of value) argv.push(`--${name}`, toArgString(v))
   } else {
-    argv.push(`--${name}`, String(value))
+    argv.push(`--${name}`, toArgString(value))
   }
 }
 
@@ -37,14 +43,14 @@ export function buildArgv(loadable: Command.Loadable, args: Record<string, unkno
 
   for (const name of Object.keys(loadable.args ?? {})) {
     const value = args[name]
-    if (value !== null && value !== undefined) argv.push(String(value))
+    if (value !== null && value !== undefined) argv.push(toArgString(value))
   }
 
   for (const [name, flag] of Object.entries(loadable.flags ?? {})) {
     if (name === 'json') continue
     const value = args[name]
     if (value === null || value === undefined) continue
-    appendFlagArgs(argv, name, flag as {type: string}, value)
+    appendFlagArgs(argv, name, flag, value)
   }
 
   return argv
@@ -54,11 +60,11 @@ function interceptOutput(instance: Command): () => string {
   const lines: string[] = []
 
   instance.log = (msg = '') => {
-    lines.push(String(msg))
+    lines.push(msg)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(instance as any).logJson = (json: unknown) => {
+  const jsonLogger = instance as unknown as {logJson(json: unknown): void}
+  jsonLogger.logJson = (json: unknown) => {
     lines.push(JSON.stringify(json, null, 2))
   }
 
@@ -76,10 +82,10 @@ export async function executeCommand(
   config: Config,
 ): Promise<RunCommandResult> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const instance = new ((await loadable.load()) as any)(argv, config) as Command
+    const CommandClass = (await loadable.load()) as unknown as new (argv: string[], config: Config) => Command
+    const instance = new CommandClass(argv, config)
     const getOutput = interceptOutput(instance)
-    const result = await instance.run()
+    const result: unknown = await instance.run()
     const output = result === null || result === undefined ? getOutput() : JSON.stringify(result, null, 2)
     return {output: output || '(no output)'}
   } catch (error) {
@@ -103,7 +109,7 @@ export async function runCommand(
     denyRules: [],
   }
   const separator = config.topicSeparator ?? ' '
-  const normalizedForPermission = loadable.id.replaceAll(':', separator)
+  const normalizedForPermission = loadable.id.replaceAll(':', () => separator)
   if (!isCommandAllowed(normalizedForPermission, permissionConfig)) {
     throw new ExecutionError(
       'permission_denied',

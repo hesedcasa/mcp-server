@@ -1,18 +1,18 @@
 import type {Command} from '@oclif/core'
 import type {Config} from '@oclif/core/interfaces'
 
-// eslint-disable-next-line import/no-unresolved
 import {Client} from '@modelcontextprotocol/sdk/client/index.js'
-// eslint-disable-next-line import/no-unresolved
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js'
 import {expect} from 'chai'
 
 import {createMcpServer} from '../src/mcp-server.js'
 
+type CallToolResult = {content: [{text: string}]; isError?: boolean}
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 function cmd(overrides: Record<string, unknown>): Command.Loadable {
-  return {
+  const loadable = {
     args: {},
     description: '',
     flags: {},
@@ -21,7 +21,8 @@ function cmd(overrides: Record<string, unknown>): Command.Loadable {
     pluginName: 'sdkck',
     summary: '',
     ...overrides,
-  } as never
+  }
+  return loadable as never
 }
 
 const SEARCH_CMD = cmd({
@@ -53,13 +54,14 @@ const PETSTORE_CMD = cmd({
 const ALL_COMMANDS = [SEARCH_CMD, IMPORT_CMD, PETSTORE_CMD]
 
 function makeMockConfig(commands: Command.Loadable[]): Config {
-  return {
+  const config = {
     commands,
     name: 'sdkck',
     runHook: async () => ({failures: [], successes: []}),
     topicSeparator: ' ',
     version: '1.0.0',
-  } as unknown as Config
+  }
+  return config as unknown as Config
 }
 
 /** Connects a fresh server+client pair via in-memory transport. */
@@ -75,11 +77,14 @@ async function makeClient(commands: Command.Loadable[]): Promise<Client> {
 
 /** Builds a loadable command whose run() logs `output` and returns null. */
 function cmdWithOutput(base: Command.Loadable, output: string): Command.Loadable {
-  return {
+  const loadable = {
     ...base,
     load: async () =>
       class MockCmd {
-        log = (_msg?: string) => {}
+        log = (_msg?: string) => {
+          // output is captured by the command runner, not printed
+        }
+
         warn = String
 
         async run() {
@@ -87,23 +92,28 @@ function cmdWithOutput(base: Command.Loadable, output: string): Command.Loadable
           return null
         }
       },
-  } as never
+  }
+  return loadable as never
 }
 
 /** Builds a loadable command whose run() throws `message`. */
 function cmdThatThrows(base: Command.Loadable, message: string): Command.Loadable {
-  return {
+  const loadable = {
     ...base,
     load: async () =>
       class ThrowCmd {
-        log = () => {}
+        log = () => {
+          // output is discarded
+        }
+
         warn = String
 
-        async run(): Promise<null> {
+        async run(): Promise<undefined> {
           throw new Error(message)
         }
       },
-  } as never
+  }
+  return loadable as never
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -129,10 +139,12 @@ describe('mcp-server', () => {
   describe('run_command tool handler', () => {
     it('returns isError for an unknown command', async () => {
       const client = await makeClient(ALL_COMMANDS)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = (await client.callTool({arguments: {commandId: 'no such command'}, name: 'run_command'})) as any
+      const result = (await client.callTool({
+        arguments: {commandId: 'no such command'},
+        name: 'run_command',
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.true
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('Unknown command')
       expect(text).to.include('no such command')
     })
@@ -144,9 +156,9 @@ describe('mcp-server', () => {
       const result = (await client.callTool({
         arguments: {args: {source: './spec.json'}, commandId: 'api import'},
         name: 'run_command',
-      })) as any // eslint-disable-line @typescript-eslint/no-explicit-any
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.undefined
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('imported')
     })
 
@@ -157,19 +169,22 @@ describe('mcp-server', () => {
       const result = (await client.callTool({
         arguments: {args: {source: './spec.json'}, commandId: 'api:import'},
         name: 'run_command',
-      })) as any // eslint-disable-line @typescript-eslint/no-explicit-any
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.undefined
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('imported-colon')
     })
 
     it('passes positional args and flags correctly to the command', async () => {
       const capturedArgv: string[] = []
-      const loadable = {
+      const capturing = {
         ...IMPORT_CMD,
         load: async () =>
           class CapturCmd {
-            log = () => {}
+            log = () => {
+              // output is discarded
+            }
+
             warn = String
 
             constructor(
@@ -183,7 +198,8 @@ describe('mcp-server', () => {
               return null
             }
           },
-      } as never as Command.Loadable
+      }
+      const loadable = capturing as never as Command.Loadable
       const client = await makeClient([loadable, SEARCH_CMD])
       await client.callTool({
         arguments: {args: {name: 'my-api', source: './api.json'}, commandId: 'api import'},
@@ -198,29 +214,34 @@ describe('mcp-server', () => {
       const result = (await client.callTool({
         arguments: {args: {source: './bad.json'}, commandId: 'api import'},
         name: 'run_command',
-      })) as any // eslint-disable-line @typescript-eslint/no-explicit-any
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.true
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('something went wrong')
     })
 
     it('runs with no args when args field is omitted', async () => {
       const executable = cmdWithOutput(PETSTORE_CMD, 'all pets')
       const client = await makeClient([executable, SEARCH_CMD])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = (await client.callTool({arguments: {commandId: 'petstore listPets'}, name: 'run_command'})) as any
+      const result = (await client.callTool({
+        arguments: {commandId: 'petstore listPets'},
+        name: 'run_command',
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.undefined
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('all pets')
     })
 
     it('passes flags field to the command alongside args', async () => {
       const capturedArgv: string[] = []
-      const loadable = {
+      const capturing = {
         ...PETSTORE_CMD,
         load: async () =>
           class CaptureCmd {
-            log = () => {}
+            log = () => {
+              // output is discarded
+            }
+
             warn = String
 
             constructor(
@@ -234,7 +255,8 @@ describe('mcp-server', () => {
               return null
             }
           },
-      } as never as Command.Loadable
+      }
+      const loadable = capturing as never as Command.Loadable
       const client = await makeClient([loadable, SEARCH_CMD])
       await client.callTool({
         arguments: {commandId: 'petstore listPets', flags: {limit: '10'}},
@@ -250,27 +272,34 @@ describe('mcp-server', () => {
     it('returns results from the search command', async () => {
       const executable = cmdWithOutput(SEARCH_CMD, 'jira get issue')
       const client = await makeClient([executable])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = (await client.callTool({arguments: {query: 'jira'}, name: 'search_tools'})) as any
+      const result = (await client.callTool({
+        arguments: {query: 'jira'},
+        name: 'search_tools',
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.undefined
-      const {text} = result.content[0] as {text: string}
+      const {text} = result.content[0]
       expect(text).to.include('jira get issue')
     })
 
     it('returns isError when no search command is registered', async () => {
       const client = await makeClient([IMPORT_CMD])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = (await client.callTool({arguments: {query: 'anything'}, name: 'search_tools'})) as any
+      const result = (await client.callTool({
+        arguments: {query: 'anything'},
+        name: 'search_tools',
+      })) as unknown as CallToolResult
       expect(result.isError).to.be.true
     })
 
     it('forwards the limit argument to the search command', async () => {
       const capturedArgv: string[] = []
-      const loadable = {
+      const capturing = {
         ...SEARCH_CMD,
         load: async () =>
           class CaptureSearch {
-            log = () => {}
+            log = () => {
+              // output is discarded
+            }
+
             warn = String
 
             constructor(
@@ -284,7 +313,8 @@ describe('mcp-server', () => {
               return null
             }
           },
-      } as never as Command.Loadable
+      }
+      const loadable = capturing as never as Command.Loadable
       const client = await makeClient([loadable])
       await client.callTool({arguments: {limit: 3, query: 'jira'}, name: 'search_tools'})
       expect(capturedArgv).to.include('--limit').and.to.include('3')

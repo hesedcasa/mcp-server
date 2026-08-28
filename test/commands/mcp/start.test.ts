@@ -8,12 +8,12 @@ describe('mcp start', () => {
   })
 
   it('can be instantiated', () => {
-    const config = {
+    const stubConfig = {
       bin: 'sdkck',
       commands: [],
       runHook: async () => ({failures: [], successes: []}),
-    } as never
-    const cmd = new McpStart([], config)
+    }
+    const cmd = new McpStart([], stubConfig as never)
     expect(cmd).to.be.instanceOf(McpStart)
   })
 })

@@ -2,17 +2,12 @@ import type {Config} from '@oclif/core/interfaces'
 
 import {isCommandAllowed, readPermissionConfig} from '@hesed/permission'
 import {buildKeywords} from '@hesed/plugin-lib'
-// eslint-disable-next-line import/no-unresolved
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
-// eslint-disable-next-line import/no-unresolved
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
-// eslint-disable-next-line import/no-unresolved
 import {CallToolRequestSchema, ListToolsRequestSchema} from '@modelcontextprotocol/sdk/types.js'
 
-import type {ToolHandler} from './tool-handlers.js'
-
 import {startHttpTransport} from './http-transport.js'
-import {makeRunCommandHandler, makeSearchToolsHandler} from './tool-handlers.js'
+import {makeRunCommandHandler, makeSearchToolsHandler, type ToolHandler} from './tool-handlers.js'
 
 // ts-prune-ignore-next
 export async function createMcpServer(config: Config): Promise<McpServer> {
@@ -22,11 +17,10 @@ export async function createMcpServer(config: Config): Promise<McpServer> {
     allowRules: [{pattern: '*'}],
     denyRules: [],
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jitPlugins = ((config.pjson?.oclif as any)?.jitPlugins as Record<string, string> | undefined) ?? {}
+  const {jitPlugins = {}} = (config.pjson?.oclif ?? {}) as {jitPlugins?: Record<string, string>}
 
   const keywords = buildKeywords(config, jitPlugins, (commandId) => isCommandAllowed(commandId, permissionConfig))
-  const searchToolsDescription = `Search for MCP tools with keywords: ${[...keywords].sort().join(' ')}`
+  const searchToolsDescription = `Search for MCP tools with keywords: ${[...keywords].toSorted().join(' ')}`
 
   mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -79,7 +73,7 @@ export async function createMcpServer(config: Config): Promise<McpServer> {
       return {content: [{text: `Unknown tool: ${name}`, type: 'text' as const}], isError: true}
     }
 
-    return handler((toolArgs ?? {}) as Record<string, unknown>)
+    return handler(toolArgs ?? {})
   })
 
   return mcpServer

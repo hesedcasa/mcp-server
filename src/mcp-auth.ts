@@ -8,12 +8,12 @@ function authFilePath(configDir: string): string {
   return join(configDir, 'mcp-auth.json')
 }
 
-export async function readMcpAuth(configDir: string): Promise<null | string> {
+export async function readMcpAuth(configDir: string): Promise<string | undefined> {
   try {
     const content = await readFile(authFilePath(configDir), 'utf8')
     return (JSON.parse(content) as {token: string}).token
   } catch {
-    return null
+    return undefined
   }
 }
 
@@ -33,7 +33,7 @@ export async function deleteMcpAuth(configDir: string): Promise<void> {
   }
 }
 
-export function checkBearerToken(req: IncomingMessage, res: ServerResponse, token: string): boolean {
+export function hasValidBearerToken(req: IncomingMessage, res: ServerResponse, token: string): boolean {
   if (req.headers.authorization === `Bearer ${token}`) return true
   res.writeHead(401, {'WWW-Authenticate': 'Bearer'})
   res.end('Unauthorized')
