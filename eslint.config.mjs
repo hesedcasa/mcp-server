@@ -8,6 +8,13 @@ const gitignorePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 
 const config = [
   includeIgnoreFile(gitignorePath),
+  {
+    // Declarative Playwright config: the root tsconfig only builds ./src, and
+    // routing the file through the project service's default project proved
+    // flaky across runner platforms (the macos matrix jobs could not resolve
+    // it at all) — so it sits outside typed linting entirely.
+    ignores: ['playwright.config.ts'],
+  },
   ...oclif,
   prettier,
   {
@@ -25,17 +32,6 @@ const config = [
       // off the declared engines floor (>=20.17), where fetch is still flagged
       // experimental, but the suite only runs on Node >= 22 (CI) in practice.
       'n/no-unsupported-features/node-builtins': 'off',
-    },
-  },
-  {
-    // The root tsconfig only builds ./src, so the project service can't find
-    // the Playwright config; lint it against the service's default project.
-    files: ['playwright.config.ts'],
-    languageOptions: {
-      parserOptions: {
-        projectService: {allowDefaultProject: ['playwright.config.ts']},
-        tsconfigRootDir: path.dirname(fileURLToPath(import.meta.url)),
-      },
     },
   },
 ]
