@@ -130,11 +130,15 @@ cleanup() {
     fi
   fi
 
-  if [ "$MYSQL_STARTED" -eq 1 ]; then
-    docker compose -f "$MYSQL_COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true
-  fi
-  if [ "$PSQL_STARTED" -eq 1 ]; then
-    docker compose -f "$PSQL_COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true
+  # --keep means keep: the containers stay up so a failed database-fixture
+  # run can be inspected after the script exits.
+  if [ "$KEEP" -eq 0 ]; then
+    if [ "$MYSQL_STARTED" -eq 1 ]; then
+      docker compose -f "$MYSQL_COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true
+    fi
+    if [ "$PSQL_STARTED" -eq 1 ]; then
+      docker compose -f "$PSQL_COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true
+    fi
   fi
 
   if [ "$KEEP" -ne 0 ]; then
@@ -181,6 +185,9 @@ start_mysql() {
 
   echo "==> Starting MySQL (project $MQ_E2E_PROJECT)"
   docker compose -f "$MYSQL_COMPOSE" up -d --build --wait >/dev/null
+  # Flag before port discovery: if `compose up` succeeded but the lookup
+  # below fails, the EXIT trap still owns the teardown (no leaked container).
+  MYSQL_STARTED=1
 
   if [ "$MQ_E2E_PORT" = "0" ]; then
     MQ_E2E_PORT="$(docker compose -f "$MYSQL_COMPOSE" port mysql 3306 | sed 's/.*://')"
@@ -188,7 +195,6 @@ start_mysql() {
   fi
 
   echo "==> MySQL is listening on port $MQ_E2E_PORT"
-  MYSQL_STARTED=1
 }
 
 start_psql() {
@@ -197,6 +203,8 @@ start_psql() {
 
   echo "==> Starting PostgreSQL (project $PG_E2E_PROJECT)"
   docker compose -f "$PSQL_COMPOSE" up -d --build --wait >/dev/null
+  # Same ownership rule as start_mysql: once the container is up, cleanup owns it.
+  PSQL_STARTED=1
 
   if [ "$PG_E2E_PORT" = "0" ]; then
     PG_E2E_PORT="$(docker compose -f "$PSQL_COMPOSE" port postgres 5432 | sed 's/.*://')"
@@ -204,7 +212,6 @@ start_psql() {
   fi
 
   echo "==> PostgreSQL is listening on port $PG_E2E_PORT"
-  PSQL_STARTED=1
 }
 
 if plugin_selected mysql; then
