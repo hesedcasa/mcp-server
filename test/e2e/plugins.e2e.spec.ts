@@ -7,7 +7,7 @@ import {expectToolSuccess, test} from './mcp.fixture.js'
 
 /**
  * Host-leg plugin execution: the MCP server runs through the sdkck host
- * (E2E_HOST_CLI, set by scripts/e2e.sh) with every @hesed plugin installed
+ * (E2E_HOST_CLI, set by scripts/e2e.sh) with every `@hesed` plugin installed
  * into a throwaway home, so run_command drives the imported plugins' real
  * commands — live sandbox reads for the credential-backed plugins, throwaway
  * Docker servers for mysql/psql, and a fully offline surface for the rest.

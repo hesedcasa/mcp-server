@@ -169,15 +169,18 @@ run_playwright
 # Host setup: the sdkck CLI, a throwaway home, and the plugin installs
 # ---------------------------------------------------------------------------
 
-if [ -z "${E2E_SDKCK_BIN:-}" ]; then
-  echo "==> Downloading the latest sdkck"
-  npm install --no-save sdkck >/dev/null
-  E2E_SDKCK_BIN="$REPO_ROOT/node_modules/.bin/sdkck"
-fi
-
 # Deliberately NOT named SDKCK_HOME: an inherited SDKCK_HOME could point at
 # the developer's real sdkck setup, and the EXIT trap must never rm -rf that.
 SDKCK_E2E_HOME="$(mktemp -d)"
+
+if [ -z "${E2E_SDKCK_BIN:-}" ]; then
+  echo "==> Downloading the latest sdkck into the throwaway home"
+  # --prefix keeps the install out of this repo's node_modules and lockfile:
+  # an in-repo `npm install --no-save sdkck` was observed rewriting
+  # package-lock.json on every run, which npm ci then rejects on CI.
+  npm install --prefix "$SDKCK_E2E_HOME" --no-audit --no-fund --silent sdkck >/dev/null
+  E2E_SDKCK_BIN="$SDKCK_E2E_HOME/node_modules/.bin/sdkck"
+fi
 
 start_mysql() {
   export MQ_E2E_PROJECT="${MQ_E2E_PROJECT:-mq-e2e-mcpserver-$$}"

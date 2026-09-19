@@ -63,7 +63,7 @@ export function loadE2eConfig(): E2eConfig {
     : resolve(import.meta.dirname, '../..')
   const port = process.env.E2E_HTTP_PORT ? Number(process.env.E2E_HTTP_PORT) : undefined
   // Host leg (E2E_HOST_CLI=sdkck, set by scripts/e2e.sh): the MCP server runs
-  // through the sdkck host with every @hesed plugin installed, so run_command
+  // through the sdkck host with every `@hesed` plugin installed, so run_command
   // can execute the imported plugins' real commands.
   const hostCli = process.env.E2E_HOST_CLI ?? ''
   const nodeCommand = process.env.E2E_NODE ?? process.execPath

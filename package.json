@@ -37,6 +37,11 @@
     "ts-prune": "^0.10.3",
     "typescript": "^5"
   },
+  "overrides": {
+    "eslint-config-xo": {
+      "typescript": "$typescript"
+    }
+  },
   "engines": {
     "node": ">=20.17.0"
   },
