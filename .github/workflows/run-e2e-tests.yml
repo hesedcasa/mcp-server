@@ -9,11 +9,10 @@ permissions: read-all
 # credential-backed sandbox reads skip without secrets; the mysql/psql legs
 # run against throwaway Docker servers (docker is preinstalled on the
 # runner).
+#
+# On demand only: the suite is triggered manually rather than on every push
+# and pull request.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
 
 concurrency:
