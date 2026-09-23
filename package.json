@@ -18,7 +18,7 @@
     "@eslint/compat": "^2",
     "@napi-rs/canvas": "^1.0.9",
     "@oclif/prettier-config": "^0.2.1",
-    "@oclif/test": "^4",
+    "@oclif/test": "^5",
     "@playwright/test": "^1.63.0",
     "@types/chai": "^5",
     "@types/chai-as-promised": "^8.0.2",
