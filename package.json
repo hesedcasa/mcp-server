@@ -9,16 +9,16 @@
   "bugs": "https://github.com/hesedcasa/mcp-server/issues",
   "dependencies": {
     "@hesed/permission": "^0.3.0",
-    "@hesed/plugin-lib": "^0.12.3",
+    "@hesed/plugin-lib": "^0.13.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@oclif/core": "^4",
+    "@oclif/core": "^5",
     "@toon-format/toon": "^4.1.0"
   },
   "devDependencies": {
     "@eslint/compat": "^2",
     "@napi-rs/canvas": "^1.0.9",
     "@oclif/prettier-config": "^0.2.1",
-    "@oclif/test": "^4",
+    "@oclif/test": "^5",
     "@playwright/test": "^1.63.0",
     "@types/chai": "^5",
     "@types/chai-as-promised": "^8.0.2",
@@ -43,7 +43,7 @@
     }
   },
   "engines": {
-    "node": ">=20.17.0"
+    "node": ">=22"
   },
   "files": [
     "./bin",
