@@ -210,6 +210,11 @@ MCP_README_BAK=""
 
 cleanup() {
   local status=$?
+  # A setup step that aborts under `set -e` after a failed leg would otherwise
+  # replace that leg's status; the first failure is the one to report.
+  if [ "${EXIT_STATUS:-0}" -ne 0 ]; then
+    status=$EXIT_STATUS
+  fi
 
   # npm pack's prepack (`oclif readme`) rewrites the tracked README.md with
   # the current machine's usage string, so every README this run packed is
@@ -259,7 +264,23 @@ trap cleanup EXIT
 
 run_playwright() {
   # Delegates to the e2e:playwright script so both legs share one config.
-  npm run --silent e2e:playwright -- ${PLAYWRIGHT_ARGS[@]+"${PLAYWRIGHT_ARGS[@]}"}
+  # Each leg gets its own HTML report and results directory: both legs always
+  # run, and a shared directory would let the sdkck leg replace the report
+  # (and the traces and screenshots) of a failed standalone leg. CI uploads
+  # playwright-report/, so both reports travel with the run.
+  local leg="$1"
+  shift
+  PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/$leg" \
+    npm run --silent e2e:playwright -- --output "test-results/$leg" ${PLAYWRIGHT_ARGS[@]+"${PLAYWRIGHT_ARGS[@]}"}
+}
+
+# Records the first failing leg's status. A later leg failing with a different
+# status must not overwrite an earlier failure: the script's contract is to
+# exit with the first failure it saw.
+EXIT_STATUS=0
+record_failure() {
+  local leg_status=$?
+  [ "$EXIT_STATUS" -ne 0 ] || EXIT_STATUS=$leg_status
 }
 
 if [ "$SKIP_SETUP" -eq 0 ]; then
@@ -268,8 +289,17 @@ if [ "$SKIP_SETUP" -eq 0 ]; then
 fi
 
 if [ "$SETUP_ONLY" -eq 0 ]; then
+  # Clear both legs' reports up front: a leg that never runs this time (sdkck
+  # setup failing after the standalone leg, say) must not leave the previous
+  # run's report beside this run's, where it would read as fresh coverage.
+  rm -rf playwright-report/standalone playwright-report/sdkck \
+    test-results/standalone test-results/sdkck
   echo "==> Leg 1: end-to-end tests through the standalone CLI"
-  run_playwright
+  # Both legs always run: a standalone-leg failure says nothing about the
+  # packed plugin, and vice versa. The `|| record_failure` form keeps `set -e`
+  # from aborting so the sdkck leg still executes; the first failure becomes
+  # the exit code.
+  run_playwright standalone || record_failure
 fi
 
 # ---------------------------------------------------------------------------
@@ -367,11 +397,15 @@ if [ "$SKIP_SETUP" -eq 0 ]; then
   # oclif.manifest.json and the README — the same artifacts the publish
   # workflow ships — so the host leg exercises the real install artifact. The
   # README backup goes into the throwaway home under a per-run name and is
-  # restored in the EXIT trap.
+  # restored right after packing; the EXIT trap covers a failed pack.
   MCP_README_BAK="$SDKCK_E2E_HOME/mcp-server-README.md.$$.bak"
   cp "$REPO_ROOT/README.md" "$MCP_README_BAK"
   echo "==> Packing the current build"
   TGZ="$(without_credentials npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
+  # A move, not a copy: once README.md is back, the EXIT trap (kept for a
+  # failed pack) must have nothing left to restore, or it would overwrite
+  # edits made while the legs run.
+  mv "$MCP_README_BAK" "$REPO_ROOT/README.md"
   install_plugin "file:$SDKCK_E2E_HOME/$TGZ" "@hesed/mcp-server (this build)"
 
   # `oclif readme` inside each sibling's prepack rewrites its tracked
@@ -450,4 +484,6 @@ if [ "$SELECTED" != "$ALL_PLUGINS" ]; then
 fi
 
 echo "==> Leg 2: end-to-end tests through the sdkck host CLI"
-run_playwright
+run_playwright sdkck || record_failure
+
+exit "$EXIT_STATUS"
