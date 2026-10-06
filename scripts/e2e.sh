@@ -23,7 +23,10 @@
 # one-time `infisical login` or, in a headless sandbox, by a machine
 # identity's INFISICAL_UNIVERSAL_AUTH_CLIENT_ID and
 # INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET. A credential still missing after
-# that only skips its plugin's tests — with a warning. mysql/psql run against
+# that only skips its plugin's tests — with a warning — unless
+# E2E_REQUIRE_CREDENTIALS is set (CI), which makes it an error. An Infisical
+# CLI that is not logged in is likewise only a warning, so the legs that need
+# no credentials still run. mysql/psql run against
 # throwaway Docker servers (fixtures vendored under test/e2e/docker/); those
 # legs need Docker with the Compose plugin.
 #
@@ -121,11 +124,16 @@ without_credentials() {
   env "${unset_args[@]}" "$@"
 }
 
+# Prints "<plugin> <var>" for every credential a selected plugin is missing.
 missing_secrets() {
   local plugin
   local var
   for plugin in $SELECTED; do
     for var in $(required_env_for "$plugin"); do
+      # The sentry test takes its API root from SENTRY_HOST or SENTRY_URL.
+      if [ "$var" = "SENTRY_URL" ] && [ -n "${SENTRY_HOST:-}" ]; then
+        continue
+      fi
       if [ -z "${!var:-}" ]; then
         echo "$plugin $var"
       fi
@@ -137,34 +145,50 @@ missing_secrets() {
 # must not have them).
 if [ "$SETUP_ONLY" -eq 0 ] && [ -n "$(missing_secrets)" ] &&
   [ -z "${E2E_VIA_INFISICAL:-}" ] && command -v infisical >/dev/null; then
-  # E2E_VIA_INFISICAL stops a second re-exec when Infisical lacks a secret.
-  # The absolute path matters: $0 may be relative to the directory we left.
   infisical_args=(--silent)
+  infisical_ready=1
   if [ -n "${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}" ]; then
     # The CLI reads the client id and secret from the environment; passing
     # them as flags would put the secret in the process list.
-    INFISICAL_TOKEN="$(infisical login --method=universal-auth --silent --plain)"
-    export INFISICAL_TOKEN
+    if INFISICAL_TOKEN="$(infisical login --method=universal-auth --silent --plain)"; then
+      export INFISICAL_TOKEN
+    else
+      infisical_ready=0
+    fi
   fi
   # A machine identity token ignores .infisical.json, so pass its project ID.
   if [ -n "${INFISICAL_TOKEN:-}" ]; then
     infisical_args+=(--projectId "$(node -p "require('./.infisical.json').workspaceId")")
   fi
-  E2E_VIA_INFISICAL=1 exec infisical run "${infisical_args[@]}" -- "$REPO_ROOT/scripts/e2e.sh" "$@"
+  # Probe before the exec: a failed `infisical run` (not logged in, no
+  # access) would end the whole run, including the legs that need no
+  # credentials. Without Infisical the run carries on, and the plugins
+  # missing credentials skip below.
+  if [ "$infisical_ready" -eq 1 ] && infisical export "${infisical_args[@]}" >/dev/null 2>&1; then
+    # E2E_VIA_INFISICAL stops a second re-exec when Infisical lacks a
+    # secret. The absolute path matters: $0 may be relative to the directory
+    # we left.
+    E2E_VIA_INFISICAL=1 exec infisical run "${infisical_args[@]}" -- "$REPO_ROOT/scripts/e2e.sh" "$@"
+  fi
+  echo "==> WARNING: could not fetch credentials from Infisical (run \`infisical login\`); continuing without them" >&2
 fi
 
 # The sandbox credentials are all the tests need; keep the Infisical ones out
 # of their environment.
 unset INFISICAL_TOKEN INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
 
-if [ "$SETUP_ONLY" -eq 0 ]; then
+MISSING_SECRETS="$(missing_secrets)"
+if [ "$SETUP_ONLY" -eq 0 ] && [ -n "$MISSING_SECRETS" ]; then
+  # CI sets E2E_REQUIRE_CREDENTIALS: there a missing credential means a broken
+  # Infisical setup, and skipping its tests would leave the run green without
+  # the live reads.
+  if [ -n "${E2E_REQUIRE_CREDENTIALS:-}" ]; then
+    echo "error: missing credentials (E2E_REQUIRE_CREDENTIALS is set): $(printf '%s\n' "$MISSING_SECRETS" | awk '{printf "%s ", $2}')" >&2
+    echo "Check they exist in Infisical's dev environment." >&2
+    exit 1
+  fi
   for plugin in $SELECTED; do
-    missing=""
-    for var in $(required_env_for "$plugin"); do
-      if [ -z "${!var:-}" ]; then
-        missing="$missing $var"
-      fi
-    done
+    missing="$(printf '%s\n' "$MISSING_SECRETS" | awk -v plugin="$plugin" '$1 == plugin {printf " %s", $2}')"
     if [ -n "$missing" ]; then
       echo "==> WARNING: $plugin tests will be skipped — missing secrets:$missing"
       echo "    (check Infisical's dev environment, and that the Infisical CLI is installed and logged in)"
@@ -190,8 +214,10 @@ cleanup() {
   # npm pack's prepack (`oclif readme`) rewrites the tracked README.md with
   # the current machine's usage string, so every README this run packed is
   # restored here — an e2e run must never dirty a worktree. Backups live in
-  # the throwaway home under per-run names, so a run killed before its
-  # restore leaves its recovery copy behind undisturbed.
+  # the throwaway home under per-run names (the PID), so a run killed before
+  # its restore leaves its recovery copy behind undisturbed — and a later run
+  # sharing that home (--setup-only/--skip-setup) never restores it over
+  # edits made since.
   if [ -n "$SDKCK_E2E_HOME" ]; then
     if [ -f "$MCP_README_BAK" ]; then
       mv "$MCP_README_BAK" "$REPO_ROOT/README.md"
@@ -200,8 +226,8 @@ cleanup() {
     if [ "$E2E_PLUGIN_SOURCE" = "local" ]; then
       local plugin
       for plugin in $ALL_PLUGINS; do
-        if [ -f "$SDKCK_E2E_HOME/$plugin-README.md.bak" ]; then
-          mv "$SDKCK_E2E_HOME/$plugin-README.md.bak" "$E2E_PLUGIN_ROOT/$plugin/README.md"
+        if [ -f "$SDKCK_E2E_HOME/$plugin-README.md.$$.bak" ]; then
+          mv "$SDKCK_E2E_HOME/$plugin-README.md.$$.bak" "$E2E_PLUGIN_ROOT/$plugin/README.md"
         fi
       done
     fi
@@ -342,7 +368,7 @@ if [ "$SKIP_SETUP" -eq 0 ]; then
   # workflow ships — so the host leg exercises the real install artifact. The
   # README backup goes into the throwaway home under a per-run name and is
   # restored in the EXIT trap.
-  MCP_README_BAK="$SDKCK_E2E_HOME/mcp-server-README.md.bak"
+  MCP_README_BAK="$SDKCK_E2E_HOME/mcp-server-README.md.$$.bak"
   cp "$REPO_ROOT/README.md" "$MCP_README_BAK"
   echo "==> Packing the current build"
   TGZ="$(without_credentials npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
@@ -363,7 +389,7 @@ if [ "$SKIP_SETUP" -eq 0 ]; then
 
     (cd "$dir" && without_credentials npm run --silent build >/dev/null 2>&1)
 
-    local bak="$SDKCK_E2E_HOME/$name-README.md.bak"
+    local bak="$SDKCK_E2E_HOME/$name-README.md.$$.bak"
     cp "$dir/README.md" "$bak"
     local tgz
     tgz="$(cd "$dir" && without_credentials npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"

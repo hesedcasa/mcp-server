@@ -151,6 +151,9 @@ jobs:
         run: npm run test:e2e -- --skip-setup
         env:
           E2E_PLUGIN_SOURCE: npm
+          # A credential missing here means a broken Infisical setup: fail
+          # rather than skip its tests and leave the run green.
+          E2E_REQUIRE_CREDENTIALS: '1'
 
       - name: Upload the Playwright report (with result screenshots)
         if: always()
