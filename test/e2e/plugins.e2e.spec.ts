@@ -188,7 +188,7 @@ test.describe('MCP host leg — imported plugin execution', () => {
   test.describe('e2e: jira plugin via sdkck', () => {
     test.skip(
       !hasEnv('ATLASSIAN_API_TOKEN', 'ATLASSIAN_EMAIL', 'ATLASSIAN_URL'),
-      'requires Atlassian credentials in .env',
+      'requires Atlassian credentials (Infisical)',
     )
 
     test('executes "jira project list" against the live sandbox', async ({mcp}) => {
@@ -205,7 +205,7 @@ test.describe('MCP host leg — imported plugin execution', () => {
   test.describe('e2e: conni plugin via sdkck', () => {
     test.skip(
       !hasEnv('ATLASSIAN_API_TOKEN', 'ATLASSIAN_EMAIL', 'ATLASSIAN_URL'),
-      'requires Atlassian credentials in .env',
+      'requires Atlassian credentials (Infisical)',
     )
 
     test('executes "conni space list" against the live sandbox', async ({mcp}) => {
@@ -215,7 +215,7 @@ test.describe('MCP host leg — imported plugin execution', () => {
   })
 
   test.describe('e2e: bb plugin via sdkck', () => {
-    test.skip(!hasEnv('BITBUCKET_API_TOKEN', 'BITBUCKET_EMAIL'), 'requires Bitbucket credentials in .env')
+    test.skip(!hasEnv('BITBUCKET_API_TOKEN', 'BITBUCKET_EMAIL'), 'requires Bitbucket credentials (Infisical)')
 
     test('executes "bb workspace list" against the live sandbox', async ({mcp}) => {
       const text = expectToolSuccess(await mcp.callTool('run_command', {commandId: 'bb workspace list'}))
@@ -226,7 +226,7 @@ test.describe('MCP host leg — imported plugin execution', () => {
   test.describe('e2e: sentry plugin via sdkck', () => {
     test.skip(
       !hasEnv('SENTRY_API_KEY') || !(process.env.SENTRY_HOST ?? process.env.SENTRY_URL),
-      'requires Sentry credentials in .env',
+      'requires Sentry credentials (Infisical)',
     )
 
     test('executes "sentry project issues" against the live sandbox', async ({mcp}) => {
@@ -239,7 +239,7 @@ test.describe('MCP host leg — imported plugin execution', () => {
   })
 
   test.describe('e2e: trello plugin via sdkck', () => {
-    test.skip(!hasEnv('TRELLO_API_KEY', 'TRELLO_SECRET'), 'requires Trello credentials in .env')
+    test.skip(!hasEnv('TRELLO_API_KEY', 'TRELLO_SECRET'), 'requires Trello credentials (Infisical)')
 
     test('executes "trello board list" against the live sandbox', async ({mcp}) => {
       const text = expectToolSuccess(await mcp.callTool('run_command', {commandId: 'trello board list'}))

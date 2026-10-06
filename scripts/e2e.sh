@@ -11,11 +11,24 @@
 #   npm run test:e2e -- --grep "jira plugin"    # extra args go to playwright
 #   npm run test:e2e -- --keep                  # leave the throwaway home behind
 #
-# Credential-backed plugin reads (jira, conni, bb, sentry, trello) load their
-# secrets from .env at the repo root when it exists and are skipped — with a
-# warning — when it does not, so the suite stays green with no secrets (CI).
-# mysql/psql run against throwaway Docker servers (fixtures vendored under
-# test/e2e/docker/); those legs need Docker with the Compose plugin.
+# CI splits the run in two so that nothing which installs packages ever shares
+# a job with the sandbox credentials (or the OIDC token that fetches them):
+#   E2E_SDKCK_HOME=<dir> npm run test:e2e -- --setup-only  # build + installs
+#   E2E_SDKCK_HOME=<dir> npm run test:e2e -- --skip-setup  # containers + legs
+# Both take the sdkck home from E2E_SDKCK_HOME and never delete it.
+#
+# The credentials for the plugin reads (jira, conni, bb, sentry, trello) come
+# from Infisical: when any the selected plugins need aren't already exported,
+# the script re-runs itself under `infisical run`, signed in either by a
+# one-time `infisical login` or, in a headless sandbox, by a machine
+# identity's INFISICAL_UNIVERSAL_AUTH_CLIENT_ID and
+# INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET. A credential still missing after
+# that only skips its plugin's tests — with a warning — unless
+# E2E_REQUIRE_CREDENTIALS is set (CI), which makes it an error. An Infisical
+# CLI that is not logged in is likewise only a warning, so the legs that need
+# no credentials still run. mysql/psql run against
+# throwaway Docker servers (fixtures vendored under test/e2e/docker/); those
+# legs need Docker with the Compose plugin.
 #
 # Plugin sources (E2E_PLUGIN_SOURCE):
 #   local (default) — build and npm pack the sibling repos (../jira, ../bb,
@@ -47,27 +60,38 @@ MYSQL_COMPOSE="$REPO_ROOT/test/e2e/docker/mysql/compose.yaml"
 PSQL_COMPOSE="$REPO_ROOT/test/e2e/docker/psql/compose.yaml"
 
 KEEP=0
+SETUP_ONLY=0
+SKIP_SETUP=0
 PLAYWRIGHT_ARGS=()
 
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
+    --setup-only) SETUP_ONLY=1 ;;
+    --skip-setup) SKIP_SETUP=1 ;;
     *) PLAYWRIGHT_ARGS+=("$arg") ;;
   esac
 done
 
+if [ "$SETUP_ONLY" -ne 0 ] && [ "$SKIP_SETUP" -ne 0 ]; then
+  echo "error: --setup-only and --skip-setup are mutually exclusive" >&2
+  exit 1
+fi
+
+if { [ "$SETUP_ONLY" -ne 0 ] || [ "$SKIP_SETUP" -ne 0 ]; } && [ -z "${E2E_SDKCK_HOME:-}" ]; then
+  echo "error: --setup-only and --skip-setup need E2E_SDKCK_HOME set to the sdkck home to share" >&2
+  exit 1
+fi
+
+if [ "$SKIP_SETUP" -ne 0 ] && [ ! -d "${E2E_SDKCK_HOME}/data" ]; then
+  echo "error: --skip-setup found no installed plugins under $E2E_SDKCK_HOME; run --setup-only first" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
-# Secrets — loaded for the credential-backed plugin reads; missing ones only
+# Credentials — fetched from Infisical for the plugin reads; missing ones only
 # skip their tests, they never fail the run.
 # ---------------------------------------------------------------------------
-
-if [ -f "$REPO_ROOT/.env" ]; then
-  echo "==> Loading secrets from .env"
-  set -a
-  # shellcheck disable=SC1091
-  . "$REPO_ROOT/.env"
-  set +a
-fi
 
 plugin_selected() {
   case " $SELECTED " in
@@ -80,23 +104,97 @@ required_env_for() {
   case "$1" in
     jira|conni) echo "ATLASSIAN_URL ATLASSIAN_EMAIL ATLASSIAN_API_TOKEN" ;;
     bb) echo "BITBUCKET_API_TOKEN BITBUCKET_EMAIL" ;;
-    sentry) echo "SENTRY_API_KEY" ;;
+    sentry) echo "SENTRY_API_KEY SENTRY_URL" ;;
     trello) echo "TRELLO_API_KEY TRELLO_SECRET" ;;
     *) echo "" ;;
   esac
 }
 
-for plugin in $SELECTED; do
-  missing=""
-  for var in $(required_env_for "$plugin"); do
-    if [ -z "${!var:-}" ]; then
-      missing="$missing $var"
+# Every credential the plugin reads use. Building, packing and installing run
+# repository, dependency and freshly fetched plugin scripts that never need
+# them, so those steps run through without_credentials.
+ALL_CREDENTIALS="ATLASSIAN_URL ATLASSIAN_EMAIL ATLASSIAN_API_TOKEN BITBUCKET_API_TOKEN
+BITBUCKET_EMAIL SENTRY_API_KEY SENTRY_URL SENTRY_HOST TRELLO_API_KEY TRELLO_SECRET"
+
+without_credentials() {
+  local unset_args=()
+  for var in $ALL_CREDENTIALS; do
+    unset_args+=(-u "$var")
+  done
+  env "${unset_args[@]}" "$@"
+}
+
+# Prints "<plugin> <var>" for every credential a selected plugin is missing.
+missing_secrets() {
+  local plugin
+  local var
+  for plugin in $SELECTED; do
+    for var in $(required_env_for "$plugin"); do
+      # The sentry test takes its API root from SENTRY_HOST or SENTRY_URL.
+      if [ "$var" = "SENTRY_URL" ] && [ -n "${SENTRY_HOST:-}" ]; then
+        continue
+      fi
+      if [ -z "${!var:-}" ]; then
+        echo "$plugin $var"
+      fi
+    done
+  done
+}
+
+# --setup-only only builds and installs, so it needs no credentials (and in CI
+# must not have them).
+if [ "$SETUP_ONLY" -eq 0 ] && [ -n "$(missing_secrets)" ] &&
+  [ -z "${E2E_VIA_INFISICAL:-}" ] && command -v infisical >/dev/null; then
+  infisical_args=(--silent)
+  infisical_ready=1
+  if [ -n "${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}" ]; then
+    # The CLI reads the client id and secret from the environment; passing
+    # them as flags would put the secret in the process list.
+    if INFISICAL_TOKEN="$(infisical login --method=universal-auth --silent --plain)"; then
+      export INFISICAL_TOKEN
+    else
+      infisical_ready=0
+    fi
+  fi
+  # A machine identity token ignores .infisical.json, so pass its project ID.
+  if [ -n "${INFISICAL_TOKEN:-}" ]; then
+    infisical_args+=(--projectId "$(node -p "require('./.infisical.json').workspaceId")")
+  fi
+  # Probe before the exec: a failed `infisical run` (not logged in, no
+  # access) would end the whole run, including the legs that need no
+  # credentials. Without Infisical the run carries on, and the plugins
+  # missing credentials skip below.
+  if [ "$infisical_ready" -eq 1 ] && infisical export "${infisical_args[@]}" >/dev/null 2>&1; then
+    # E2E_VIA_INFISICAL stops a second re-exec when Infisical lacks a
+    # secret. The absolute path matters: $0 may be relative to the directory
+    # we left.
+    E2E_VIA_INFISICAL=1 exec infisical run "${infisical_args[@]}" -- "$REPO_ROOT/scripts/e2e.sh" "$@"
+  fi
+  echo "==> WARNING: could not fetch credentials from Infisical (run \`infisical login\`); continuing without them" >&2
+fi
+
+# The sandbox credentials are all the tests need; keep the Infisical ones out
+# of their environment.
+unset INFISICAL_TOKEN INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+
+MISSING_SECRETS="$(missing_secrets)"
+if [ "$SETUP_ONLY" -eq 0 ] && [ -n "$MISSING_SECRETS" ]; then
+  # CI sets E2E_REQUIRE_CREDENTIALS: there a missing credential means a broken
+  # Infisical setup, and skipping its tests would leave the run green without
+  # the live reads.
+  if [ -n "${E2E_REQUIRE_CREDENTIALS:-}" ]; then
+    echo "error: missing credentials (E2E_REQUIRE_CREDENTIALS is set): $(printf '%s\n' "$MISSING_SECRETS" | awk '{printf "%s ", $2}')" >&2
+    echo "Check they exist in Infisical's dev environment." >&2
+    exit 1
+  fi
+  for plugin in $SELECTED; do
+    missing="$(printf '%s\n' "$MISSING_SECRETS" | awk -v plugin="$plugin" '$1 == plugin {printf " %s", $2}')"
+    if [ -n "$missing" ]; then
+      echo "==> WARNING: $plugin tests will be skipped — missing secrets:$missing"
+      echo "    (check Infisical's dev environment, and that the Infisical CLI is installed and logged in)"
     fi
   done
-  if [ -n "$missing" ]; then
-    echo "==> WARNING: $plugin tests will be skipped — missing secrets:$missing"
-  fi
-done
+fi
 
 # ---------------------------------------------------------------------------
 # Docker fixtures for the mysql/psql legs
@@ -105,6 +203,9 @@ done
 MYSQL_STARTED=0
 PSQL_STARTED=0
 SDKCK_E2E_HOME=""
+# Set only for a home this script mktemp'd itself; one handed in through
+# E2E_SDKCK_HOME (--setup-only/--skip-setup) is never deleted.
+OWNS_HOME=0
 MCP_README_BAK=""
 
 cleanup() {
@@ -113,8 +214,10 @@ cleanup() {
   # npm pack's prepack (`oclif readme`) rewrites the tracked README.md with
   # the current machine's usage string, so every README this run packed is
   # restored here — an e2e run must never dirty a worktree. Backups live in
-  # the throwaway home under per-run names, so a run killed before its
-  # restore leaves its recovery copy behind undisturbed.
+  # the throwaway home under per-run names (the PID), so a run killed before
+  # its restore leaves its recovery copy behind undisturbed — and a later run
+  # sharing that home (--setup-only/--skip-setup) never restores it over
+  # edits made since.
   if [ -n "$SDKCK_E2E_HOME" ]; then
     if [ -f "$MCP_README_BAK" ]; then
       mv "$MCP_README_BAK" "$REPO_ROOT/README.md"
@@ -123,8 +226,8 @@ cleanup() {
     if [ "$E2E_PLUGIN_SOURCE" = "local" ]; then
       local plugin
       for plugin in $ALL_PLUGINS; do
-        if [ -f "$SDKCK_E2E_HOME/$plugin-README.md.bak" ]; then
-          mv "$SDKCK_E2E_HOME/$plugin-README.md.bak" "$E2E_PLUGIN_ROOT/$plugin/README.md"
+        if [ -f "$SDKCK_E2E_HOME/$plugin-README.md.$$.bak" ]; then
+          mv "$SDKCK_E2E_HOME/$plugin-README.md.$$.bak" "$E2E_PLUGIN_ROOT/$plugin/README.md"
         fi
       done
     fi
@@ -146,7 +249,7 @@ cleanup() {
     exit "$status"
   fi
 
-  if [ -n "$SDKCK_E2E_HOME" ]; then
+  if [ "$OWNS_HOME" -ne 0 ]; then
     rm -rf "$SDKCK_E2E_HOME"
   fi
 
@@ -159,11 +262,15 @@ run_playwright() {
   npm run --silent e2e:playwright -- ${PLAYWRIGHT_ARGS[@]+"${PLAYWRIGHT_ARGS[@]}"}
 }
 
-echo "==> Building the CLI"
-npm run --silent build
+if [ "$SKIP_SETUP" -eq 0 ]; then
+  echo "==> Building the CLI"
+  without_credentials npm run --silent build
+fi
 
-echo "==> Leg 1: end-to-end tests through the standalone CLI"
-run_playwright
+if [ "$SETUP_ONLY" -eq 0 ]; then
+  echo "==> Leg 1: end-to-end tests through the standalone CLI"
+  run_playwright
+fi
 
 # ---------------------------------------------------------------------------
 # Host setup: the sdkck CLI, a throwaway home, and the plugin installs
@@ -171,14 +278,22 @@ run_playwright
 
 # Deliberately NOT named SDKCK_HOME: an inherited SDKCK_HOME could point at
 # the developer's real sdkck setup, and the EXIT trap must never rm -rf that.
-SDKCK_E2E_HOME="$(mktemp -d)"
+if [ "$SETUP_ONLY" -ne 0 ] || [ "$SKIP_SETUP" -ne 0 ]; then
+  SDKCK_E2E_HOME="$E2E_SDKCK_HOME"
+  mkdir -p "$SDKCK_E2E_HOME"
+else
+  SDKCK_E2E_HOME="$(mktemp -d)"
+  OWNS_HOME=1
+fi
 
-if [ -z "${E2E_SDKCK_BIN:-}" ]; then
+if [ "$SKIP_SETUP" -ne 0 ]; then
+  E2E_SDKCK_BIN="${E2E_SDKCK_BIN:-$SDKCK_E2E_HOME/node_modules/.bin/sdkck}"
+elif [ -z "${E2E_SDKCK_BIN:-}" ]; then
   echo "==> Downloading the latest sdkck into the throwaway home"
   # --prefix keeps the install out of this repo's node_modules and lockfile:
   # an in-repo `npm install --no-save sdkck` was observed rewriting
   # package-lock.json on every run, which npm ci then rejects on CI.
-  npm install --prefix "$SDKCK_E2E_HOME" --no-audit --no-fund --silent sdkck >/dev/null
+  without_credentials npm install --prefix "$SDKCK_E2E_HOME" --no-audit --no-fund --silent sdkck >/dev/null
   E2E_SDKCK_BIN="$SDKCK_E2E_HOME/node_modules/.bin/sdkck"
 fi
 
@@ -217,14 +332,14 @@ start_psql() {
   echo "==> PostgreSQL is listening on port $PG_E2E_PORT"
 }
 
-if plugin_selected mysql; then
+if [ "$SETUP_ONLY" -eq 0 ] && plugin_selected mysql; then
   if docker compose version >/dev/null 2>&1; then
     start_mysql
   else
     echo "==> WARNING: docker compose unavailable — mysql tests will be skipped" >&2
   fi
 fi
-if plugin_selected psql; then
+if [ "$SETUP_ONLY" -eq 0 ] && plugin_selected psql; then
   if docker compose version >/dev/null 2>&1; then
     start_psql
   else
@@ -239,63 +354,71 @@ install_plugin() {
   echo "==> Installing $name into the throwaway home"
   # A tarball must be passed as a `file:` URL: sdkck resolves any bare path
   # containing a slash as a GitHub org/repo.
-  SDKCK_CACHE_DIR="$SDKCK_E2E_HOME/cache" \
-  SDKCK_CONFIG_DIR="$SDKCK_E2E_HOME/config" \
-  SDKCK_DATA_DIR="$SDKCK_E2E_HOME/data" \
+  without_credentials \
+    SDKCK_CACHE_DIR="$SDKCK_E2E_HOME/cache" \
+    SDKCK_CONFIG_DIR="$SDKCK_E2E_HOME/config" \
+    SDKCK_DATA_DIR="$SDKCK_E2E_HOME/data" \
     "$E2E_SDKCK_BIN" plugins install "$spec" >/dev/null
 }
 
-# This build first, so the host's `mcp` commands come from the build under
-# test, not the release sdkck bundles. Packing runs prepack, regenerating
-# oclif.manifest.json and the README — the same artifacts the publish
-# workflow ships — so the host leg exercises the real install artifact. The
-# README backup goes into the throwaway home under a per-run name and is
-# restored in the EXIT trap.
-MCP_README_BAK="$SDKCK_E2E_HOME/mcp-server-README.md.bak"
-cp "$REPO_ROOT/README.md" "$MCP_README_BAK"
-echo "==> Packing the current build"
-TGZ="$(npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
-install_plugin "file:$SDKCK_E2E_HOME/$TGZ" "@hesed/mcp-server (this build)"
+if [ "$SKIP_SETUP" -eq 0 ]; then
+  # This build first, so the host's `mcp` commands come from the build under
+  # test, not the release sdkck bundles. Packing runs prepack, regenerating
+  # oclif.manifest.json and the README — the same artifacts the publish
+  # workflow ships — so the host leg exercises the real install artifact. The
+  # README backup goes into the throwaway home under a per-run name and is
+  # restored in the EXIT trap.
+  MCP_README_BAK="$SDKCK_E2E_HOME/mcp-server-README.md.$$.bak"
+  cp "$REPO_ROOT/README.md" "$MCP_README_BAK"
+  echo "==> Packing the current build"
+  TGZ="$(without_credentials npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
+  install_plugin "file:$SDKCK_E2E_HOME/$TGZ" "@hesed/mcp-server (this build)"
 
-# `oclif readme` inside each sibling's prepack rewrites its tracked
-# README.md, so back it up and restore it right after packing — the backup
-# lives in the throwaway home under a per-run name, never a fixed path.
-pack_plugin() {
-  local dir="$1"
-  local name
-  name="$(basename "$dir")"
+  # `oclif readme` inside each sibling's prepack rewrites its tracked
+  # README.md, so back it up and restore it right after packing — the backup
+  # lives in the throwaway home under a per-run name, never a fixed path.
+  pack_plugin() {
+    local dir="$1"
+    local name
+    name="$(basename "$dir")"
 
-  echo "==> Building and packing $name" >&2
-  if [ ! -d "$dir/node_modules" ]; then
-    (cd "$dir" && npm ci --silent >/dev/null 2>&1)
-  fi
+    echo "==> Building and packing $name" >&2
+    if [ ! -d "$dir/node_modules" ]; then
+      (cd "$dir" && without_credentials npm ci --silent >/dev/null 2>&1)
+    fi
 
-  (cd "$dir" && npm run --silent build >/dev/null 2>&1)
+    (cd "$dir" && without_credentials npm run --silent build >/dev/null 2>&1)
 
-  local bak="$SDKCK_E2E_HOME/$name-README.md.bak"
-  cp "$dir/README.md" "$bak"
-  local tgz
-  tgz="$(cd "$dir" && npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
-  mv "$bak" "$dir/README.md"
+    local bak="$SDKCK_E2E_HOME/$name-README.md.$$.bak"
+    cp "$dir/README.md" "$bak"
+    local tgz
+    tgz="$(cd "$dir" && without_credentials npm pack --pack-destination "$SDKCK_E2E_HOME" | tail -n 1)"
+    mv "$bak" "$dir/README.md"
 
-  echo "$SDKCK_E2E_HOME/$tgz"
-}
+    echo "$SDKCK_E2E_HOME/$tgz"
+  }
 
-for plugin in $SELECTED; do
-  if [ "$E2E_PLUGIN_SOURCE" = "npm" ]; then
-    install_plugin "@hesed/$plugin@latest" "@hesed/$plugin@latest"
-    continue
-  fi
+  for plugin in $SELECTED; do
+    if [ "$E2E_PLUGIN_SOURCE" = "npm" ]; then
+      install_plugin "@hesed/$plugin@latest" "@hesed/$plugin@latest"
+      continue
+    fi
 
-  dir="$E2E_PLUGIN_ROOT/$plugin"
-  if [ ! -d "$dir" ]; then
-    echo "error: plugin repo not found: $dir (set E2E_PLUGIN_ROOT, or use E2E_PLUGIN_SOURCE=npm)" >&2
-    exit 1
-  fi
+    dir="$E2E_PLUGIN_ROOT/$plugin"
+    if [ ! -d "$dir" ]; then
+      echo "error: plugin repo not found: $dir (set E2E_PLUGIN_ROOT, or use E2E_PLUGIN_SOURCE=npm)" >&2
+      exit 1
+    fi
 
-  tgz="$(pack_plugin "$dir")"
-  install_plugin "file:$tgz" "@hesed/$plugin (local $dir)"
-done
+    tgz="$(pack_plugin "$dir")"
+    install_plugin "file:$tgz" "@hesed/$plugin (local $dir)"
+  done
+fi
+
+if [ "$SETUP_ONLY" -ne 0 ]; then
+  echo "==> sdkck and plugins installed into $SDKCK_E2E_HOME"
+  exit 0
+fi
 
 export E2E_SDKCK_HOME="$SDKCK_E2E_HOME"
 export E2E_HOST_CLI="$E2E_SDKCK_BIN"
