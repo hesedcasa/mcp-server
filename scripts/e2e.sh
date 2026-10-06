@@ -289,6 +289,11 @@ if [ "$SKIP_SETUP" -eq 0 ]; then
 fi
 
 if [ "$SETUP_ONLY" -eq 0 ]; then
+  # Clear both legs' reports up front: a leg that never runs this time (sdkck
+  # setup failing after the standalone leg, say) must not leave the previous
+  # run's report beside this run's, where it would read as fresh coverage.
+  rm -rf playwright-report/standalone playwright-report/sdkck \
+    test-results/standalone test-results/sdkck
   echo "==> Leg 1: end-to-end tests through the standalone CLI"
   # Both legs always run: a standalone-leg failure says nothing about the
   # packed plugin, and vice versa. The `|| record_failure` form keeps `set -e`
