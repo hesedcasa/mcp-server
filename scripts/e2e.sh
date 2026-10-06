@@ -264,7 +264,14 @@ trap cleanup EXIT
 
 run_playwright() {
   # Delegates to the e2e:playwright script so both legs share one config.
-  npm run --silent e2e:playwright -- ${PLAYWRIGHT_ARGS[@]+"${PLAYWRIGHT_ARGS[@]}"}
+  # Each leg gets its own HTML report and results directory: both legs always
+  # run, and a shared directory would let the sdkck leg replace the report
+  # (and the traces and screenshots) of a failed standalone leg. CI uploads
+  # playwright-report/, so both reports travel with the run.
+  local leg="$1"
+  shift
+  PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/$leg" \
+    npm run --silent e2e:playwright -- --output "test-results/$leg" ${PLAYWRIGHT_ARGS[@]+"${PLAYWRIGHT_ARGS[@]}"}
 }
 
 # Records the first failing leg's status. A later leg failing with a different
@@ -287,7 +294,7 @@ if [ "$SETUP_ONLY" -eq 0 ]; then
   # packed plugin, and vice versa. The `|| record_failure` form keeps `set -e`
   # from aborting so the sdkck leg still executes; the first failure becomes
   # the exit code.
-  run_playwright || record_failure
+  run_playwright standalone || record_failure
 fi
 
 # ---------------------------------------------------------------------------
@@ -472,6 +479,6 @@ if [ "$SELECTED" != "$ALL_PLUGINS" ]; then
 fi
 
 echo "==> Leg 2: end-to-end tests through the sdkck host CLI"
-run_playwright || record_failure
+run_playwright sdkck || record_failure
 
 exit "$EXIT_STATUS"

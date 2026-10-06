@@ -9,7 +9,8 @@ export default defineConfig({
   fullyParallel: false,
   outputDir: 'test-results',
   // The HTML report carries every MCP/HTTP exchange as a PNG screenshot —
-  // browse it with `npm run e2e:report` after a run.
+  // browse it with `npm run e2e:report` after a run (after scripts/e2e.sh,
+  // which keeps one report per leg: `npm run e2e:report -- playwright-report/sdkck`).
   reporter: process.env.CI ? [['github'], ['html', {open: 'never'}]] : [['list'], ['html', {open: 'never'}]],
   retries: process.env.CI ? 1 : 0,
   testDir: 'test/e2e',
